@@ -4,7 +4,6 @@
  */
 
 import React, { useState, useRef, useEffect } from 'react';
-import { GoogleGenAI } from "@google/genai";
 import { 
   Send, 
   Image as ImageIcon, 
@@ -16,12 +15,18 @@ import {
   History,
   Info,
   ChevronLeft,
-  Sparkles
+  Sparkles,
+  LogOut,
+  User as UserIcon
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
+import { BrowserRouter, Routes, Route, useNavigate, Navigate } from 'react-router-dom';
+import { supabase } from './supabaseClient';
+import SignIn from './SignIn';
+import SignUp from './SignUp';
 
-// Initialize Gemini API
-const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY || '' });
+// Initialize Gemini API - Moved to server side for better security and Vercel compatibility
+// const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY || '' });
 
 interface Message {
   role: 'user' | 'assistant';
@@ -68,6 +73,36 @@ const cleanMarkdown = (text: string) => {
 };
 
 export default function App() {
+  const [session, setSession] = useState<any>(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      setSession(session);
+      setLoading(false);
+    });
+
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      setSession(session);
+      setLoading(false);
+    });
+
+    return () => subscription.unsubscribe();
+  }, []);
+
+  return (
+    <BrowserRouter>
+      <Routes>
+        <Route path="/" element={session ? <Home user={session.user} /> : <Navigate to="/signin" />} />
+        <Route path="/signin" element={!session ? <SignIn /> : <Navigate to="/" />} />
+        <Route path="/signup" element={!session ? <SignUp /> : <Navigate to="/" />} />
+        <Route path="*" element={<Navigate to="/" />} />
+      </Routes>
+    </BrowserRouter>
+  );
+}
+
+function Home({ user: initialUser }: { user: any }) {
   const [messages, setMessages] = useState<Message[]>([]);
   const [currentPage, setCurrentPage] = useState<'chat' | 'about'>('chat');
   const [input, setInput] = useState('');
@@ -75,6 +110,8 @@ export default function App() {
   const [selectedImage, setSelectedImage] = useState<string | null>(null);
   const [modelTier, setModelTier] = useState<'ALI4.6' | 'ALI5.7 BETA'>('ALI4.6');
   const [showModelEffect, setShowModelEffect] = useState(false);
+  const [user, setUser] = useState<any>(initialUser);
+  const navigate = useNavigate();
   const [isDarkMode, setIsDarkMode] = useState(() => {
     if (typeof window !== 'undefined') {
       const saved = localStorage.getItem('khawarizmi-dark-mode');
@@ -84,6 +121,22 @@ export default function App() {
   });
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    setUser(initialUser);
+  }, [initialUser]);
+
+  useEffect(() => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      setUser(session?.user ?? null);
+    });
+
+    return () => subscription.unsubscribe();
+  }, []);
+
+  const handleSignOut = async () => {
+    await supabase.auth.signOut();
+  };
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -197,13 +250,11 @@ export default function App() {
     };
 
     setMessages(prev => [...prev, userMessage]);
-    setInput('');
-    setSelectedImage(null);
     setIsTyping(true);
 
     try {
       const model = "gemini-3.1-pro-preview";
-      const parts = [];
+      const parts: any[] = [];
       if (userMessage.image) {
         const base64Data = userMessage.image.split(',')[1];
         parts.push({
@@ -220,22 +271,38 @@ export default function App() {
         parts.push({ text: "اشرح لي هذا السؤال من فضلك." });
       }
 
-      const response = await ai.models.generateContent({
-        model,
-        contents: { parts },
-        config: {
-          systemInstruction: getSystemInstruction(modelTier),
-          temperature: 0.7,
-        }
+      // Call our server-side API instead of direct Gemini usage
+      const response = await fetch('/api/chat', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          model,
+          contents: { parts },
+          config: {
+            systemInstruction: getSystemInstruction(modelTier),
+            temperature: 0.7,
+          }
+        }),
       });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.message || "Failed to fetch from AI server");
+      }
+
+      const data = await response.json();
 
       const assistantMessage: Message = {
         role: 'assistant',
-        content: cleanMarkdown(response.text || "عذراً، حدث خطأ أثناء معالجة طلبك."),
+        content: cleanMarkdown(data.text || "عذراً، حدث خطأ أثناء معالجة طلبك."),
         timestamp: new Date(),
       };
 
       setMessages(prev => [...prev, assistantMessage]);
+      setInput(''); // Clear input only on success
+      setSelectedImage(null); // Clear image only on success
     } catch (error) {
       console.error("Gemini Error:", error);
       const errorMessage: Message = {
@@ -349,6 +416,23 @@ export default function App() {
             <div className="w-10 h-10 rounded-xl bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 flex items-center justify-center text-slate-400 dark:text-slate-500 hover:bg-slate-200 dark:hover:bg-slate-700 hover:text-slate-600 transition-all cursor-pointer shadow-sm">
               <History size={20} />
             </div>
+            {user ? (
+               <button 
+                 onClick={handleSignOut}
+                 className="flex items-center gap-2 px-4 py-2 bg-red-50 dark:bg-red-500/10 text-red-600 dark:text-red-400 rounded-xl text-xs font-bold hover:bg-red-100 dark:hover:bg-red-500/20 transition-all"
+               >
+                 <LogOut size={14} />
+                 <span>خروج</span>
+               </button>
+            ) : (
+               <button 
+                 onClick={() => navigate('/signin')}
+                 className="flex items-center gap-2 px-4 py-2 bg-slate-900 dark:bg-white text-white dark:text-slate-900 rounded-xl text-xs font-bold hover:scale-105 transition-all"
+               >
+                 <UserIcon size={14} />
+                 <span>دخول</span>
+               </button>
+            )}
           </div>
         </div>
       </nav>
