@@ -1,0 +1,8 @@
+{
+  "name": "الخوارزمي AI",
+  "description": "مساعد ذكي متخصص لمساعدة الطلاب السعوديين على اجتياز اختبار القدرات العامة الكمي بأعلى الدرجات.",
+  "requestFramePermissions": [
+    "camera"
+  ],
+  "majorCapabilities": []
+}

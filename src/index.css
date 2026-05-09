@@ -1,0 +1,460 @@
+@import url('https://fonts.googleapis.com/css2?family=Cairo:wght@400;500;600;700;900&family=JetBrains+Mono:wght@400;700&display=swap');
+@import "tailwindcss";
+
+@theme {
+  --font-sans: "Cairo", ui-sans-serif, system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, monospace;
+  --variant-dark: (&:where(.dark, .dark *));
+}
+
+:root {
+  direction: rtl;
+  --primary: #0f172a;
+  --primary-foreground: #ffffff;
+  --secondary: #64748b;
+  --accent: #6366f1;
+}
+
+.dark {
+  --primary: #f8fafc;
+  --primary-foreground: #0f172a;
+  --secondary: #94a3b8;
+  --accent: #818cf8;
+}
+
+body {
+  @apply bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100 min-h-screen font-sans transition-colors duration-500;
+  background-image: 
+    radial-gradient(at 0% 0%, rgba(99, 102, 241, 0.03) 0px, transparent 50%),
+    radial-gradient(at 100% 0%, rgba(139, 92, 246, 0.03) 0px, transparent 50%);
+}
+
+.dark body {
+  background-image: 
+    radial-gradient(at 0% 0%, rgba(99, 102, 241, 0.05) 0px, transparent 50%),
+    radial-gradient(at 100% 0%, rgba(139, 92, 246, 0.05) 0px, transparent 50%);
+}
+
+/* Custom scrollbar for a polished look */
+::-webkit-scrollbar {
+  width: 6px;
+}
+
+::-webkit-scrollbar-track {
+  @apply bg-transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  @apply bg-slate-200 rounded-full hover:bg-slate-300 transition-colors;
+}
+
+/* From Uiverse.io by marcelodolza */ 
+.uiverse-button {
+  --primary: #0f172a; /* Slate 900 */
+  --neutral-1: #f7f8f7;
+  --neutral-2: #e7e7e7;
+  --radius: 14px;
+
+  cursor: pointer;
+  border-radius: var(--radius);
+  text-shadow: 0 1px 1px rgba(0, 0, 0, 0.1);
+  border: none;
+  box-shadow: 0 0.5px 0.5px 1px rgba(255, 255, 255, 0.2),
+    0 10px 20px rgba(0, 0, 0, 0.1), 0 4px 5px 0px rgba(0, 0, 0, 0.05);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+  transition: all 0.3s ease;
+  min-width: 140px;
+  padding: 12px 20px;
+  height: 48px;
+  font-family: inherit;
+  font-style: normal;
+  font-size: 14px;
+  font-weight: 700;
+  overflow: visible;
+}
+
+.uiverse-button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  filter: grayscale(1);
+}
+
+.uiverse-button:hover:not(:disabled) {
+  transform: scale(1.02);
+  box-shadow: 0 0 1px 2px rgba(255, 255, 255, 0.3),
+    0 15px 30px rgba(0, 0, 0, 0.15), 0 10px 3px -3px rgba(0, 0, 0, 0.04);
+}
+.uiverse-button:active:not(:disabled) {
+  transform: scale(0.98);
+  box-shadow: 0 0 1px 2px rgba(255, 255, 255, 0.3),
+    0 10px 3px -3px rgba(0, 0, 0, 0.2);
+}
+.uiverse-button:after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: var(--radius);
+  border: 2px solid transparent;
+  background: linear-gradient(var(--neutral-1), var(--neutral-2)) padding-box,
+    linear-gradient(to bottom, rgba(0, 0, 0, 0.1), rgba(0, 0, 0, 0.2))
+      border-box;
+  z-index: 0;
+  transition: all 0.4s ease;
+}
+.uiverse-button:hover:not(:disabled)::after {
+  transform: scale(1.05, 1.1);
+  box-shadow: inset 0 -1px 3px 0 rgba(255, 255, 255, 1);
+}
+.uiverse-button::before {
+  content: "";
+  inset: 4px 4px 4px 4px;
+  position: absolute;
+  background: linear-gradient(to top, var(--neutral-1), var(--neutral-2));
+  border-radius: inherit;
+  filter: blur(0.5px);
+  z-index: 2;
+}
+.state p {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin: 0;
+}
+.state .icon {
+  position: absolute;
+  left: 10px;
+  top: 0;
+  bottom: 0;
+  margin: auto;
+  transform: scale(1.1);
+  transition: all 0.3s ease;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+[dir="rtl"] .state .icon {
+  left: auto;
+  right: 10px;
+  transform: scale(1.1) rotate(180deg);
+}
+
+.state .icon svg {
+  overflow: visible;
+}
+
+/* Outline */
+.uiverse-outline {
+  position: absolute;
+  border-radius: inherit;
+  overflow: hidden;
+  z-index: 1;
+  opacity: 0;
+  transition: opacity 0.4s ease;
+  inset: -2px -3.5px;
+}
+.uiverse-outline::before {
+  content: "";
+  position: absolute;
+  inset: -100%;
+  background: conic-gradient(
+    from 180deg,
+    transparent 60%,
+    white 80%,
+    transparent 100%
+  );
+  animation: uiverse-spin 2s linear infinite;
+  animation-play-state: paused;
+}
+@keyframes uiverse-spin {
+  0% {
+    transform: rotate(0deg);
+  }
+  100% {
+    transform: rotate(360deg);
+  }
+}
+.uiverse-button:hover:not(:disabled) .uiverse-outline {
+  opacity: 1;
+}
+.uiverse-button:hover:not(:disabled) .uiverse-outline::before {
+  animation-play-state: running;
+}
+
+/* Letters */
+.uiverse-text {
+  opacity: 0;
+  animation: uiverse-slideDown 0.8s ease forwards;
+}
+.uiverse-button:hover:not(:disabled) .uiverse-text {
+  opacity: 1;
+  animation: uiverse-wave 0.5s ease forwards;
+}
+
+@keyframes uiverse-wave {
+  30% {
+    opacity: 1;
+    transform: translateY(4px);
+  }
+  50% {
+    opacity: 1;
+    transform: translateY(-3px);
+    color: var(--primary);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+@keyframes uiverse-slideDown {
+  0% {
+    opacity: 0;
+    transform: translateY(-20px);
+    color: var(--primary);
+    filter: blur(5px);
+  }
+  30% {
+    opacity: 1;
+    transform: translateY(4px);
+    filter: blur(0);
+  }
+  50% {
+    opacity: 1;
+    transform: translateY(-3px);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* Plane */
+.state--default .icon svg {
+  animation: uiverse-land 0.6s ease forwards;
+}
+.uiverse-button:hover:not(:disabled) .state--default .icon {
+  transform: rotate(45deg) scale(1.1);
+}
+
+[dir="rtl"] .uiverse-button:hover:not(:disabled) .state--default .icon {
+  transform: rotate(225deg) scale(1.1);
+}
+
+@keyframes uiverse-land {
+  0% {
+    transform: translateX(-60px) translateY(30px) rotate(-50deg) scale(2);
+    opacity: 0;
+    filter: blur(3px);
+  }
+  100% {
+    transform: translateX(0) translateY(0) rotate(0);
+    opacity: 1;
+    filter: blur(0);
+  }
+}
+
+/* States */
+.state {
+  padding-left: 20px;
+  z-index: 2;
+  display: flex;
+  position: relative;
+}
+[dir="rtl"] .state {
+  padding-left: 0;
+  padding-right: 20px;
+}
+
+.state--default span:nth-child(2) {
+  margin-right: 2px;
+}
+
+/* From Uiverse.io by alexruix */ 
+/* The switch - the box around the slider */
+.uiverse-switch {
+  font-size: 14px;
+  position: relative;
+  display: inline-block;
+  width: 3.2em;
+  height: 1.8em;
+  cursor: pointer;
+}
+
+/* Hide default HTML checkbox */
+.uiverse-switch input {
+  position: absolute;
+  opacity: 0;
+  width: 0;
+  height: 0;
+  pointer-events: none;
+}
+
+/* The slider */
+.uiverse-slider {
+  --background: #1e293b;
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: var(--background);
+  transition: .4s cubic-bezier(0.4, 0, 0.2, 1);
+  border-radius: 30px;
+}
+
+.dark .uiverse-slider {
+  --background: #475569;
+}
+
+.uiverse-slider:before {
+  position: absolute;
+  content: "";
+  height: 1.3em;
+  width: 1.3em;
+  border-radius: 50%;
+  left: 0.25em;
+  bottom: 0.25em;
+  box-shadow: inset 8px -4px 0px 0px #fbbf24;
+  background: var(--background);
+  transition: .4s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.uiverse-switch input:checked + .uiverse-slider {
+  background-color: #6366f1;
+}
+
+.uiverse-switch input:checked + .uiverse-slider:before {
+  transform: translateX(1.4em);
+  box-shadow: inset 15px -4px 0px 15px #fbbf24;
+}
+
+@layer base {
+  .dark body {
+    @apply bg-slate-950 text-slate-100;
+  }
+}
+.uiverse-loader {
+  width: 80px;
+  height: 40px;
+  position: relative;
+}
+
+.uiverse-loader-text {
+  position: absolute;
+  top: 0;
+  right: 0;
+  padding: 0;
+  margin: 0;
+  color: #64748b; /* Slate 500 */
+  animation: text_713 3.5s ease both infinite;
+  font-size: .75rem;
+  font-weight: 700;
+  letter-spacing: 1px;
+}
+
+.uiverse-load {
+  background-color: #0f172a; /* Slate 900 */
+  border-radius: 50px;
+  display: block;
+  height: 12px;
+  width: 12px;
+  bottom: 0;
+  right: 0;
+  position: absolute;
+  transform: translateX(-64px);
+  animation: loading_713 3.5s ease both infinite;
+}
+
+.uiverse-load::before {
+  position: absolute;
+  content: "";
+  width: 100%;
+  height: 100%;
+  background-color: #cbd5e1; /* Slate 300 */
+  border-radius: inherit;
+  animation: loading2_713 3.5s ease both infinite;
+}
+
+@keyframes text_713 {
+  0% {
+    letter-spacing: 1px;
+    transform: translateX(0px);
+  }
+
+  40% {
+    letter-spacing: 2px;
+    transform: translateX(-10px);
+  }
+
+  80% {
+    letter-spacing: 1px;
+    transform: translateX(-15px);
+  }
+
+  90% {
+    letter-spacing: 2px;
+    transform: translateX(0px);
+  }
+
+  100% {
+    letter-spacing: 1px;
+    transform: translateX(0px);
+  }
+}
+
+@keyframes loading_713 {
+  0% {
+    width: 12px;
+    transform: translateX(0px);
+  }
+
+  40% {
+    width: 100%;
+    transform: translateX(0px);
+  }
+
+  80% {
+    width: 12px;
+    transform: translateX(-64px);
+  }
+
+  90% {
+    width: 100%;
+    transform: translateX(0px);
+  }
+
+  100% {
+    width: 12px;
+    transform: translateX(0px);
+  }
+}
+
+@keyframes loading2_713 {
+  0% {
+    transform: translateX(0px);
+    width: 12px;
+  }
+
+  40% {
+    transform: translateX(0%);
+    width: 80%;
+  }
+
+  80% {
+    width: 100%;
+    transform: translateX(0px);
+  }
+
+  90% {
+    width: 80%;
+    transform: translateX(-10px);
+  }
+
+  100% {
+    transform: translateX(0px);
+    width: 12px;
+  }
+}
