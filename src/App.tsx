@@ -28,9 +28,8 @@ import SignUp from './SignUp';
 import Profile from './Profile';
 import { useSearchParams } from 'react-router-dom';
 
-// Initialize Gemini API - Using the key provided by the user
-const apiKey = "AIzaSyCxGf8srYTO8CMwfYQOqGviYM3KmRwvCjY";
-const ai = new GoogleGenAI({ apiKey });
+// Initialize Gemini API - Using secure environment variable to prevent leak errors
+const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY || '' });
 
 interface Message {
   id?: string;
