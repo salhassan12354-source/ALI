@@ -28,8 +28,9 @@ import SignUp from './SignUp';
 import Profile from './Profile';
 import { useSearchParams } from 'react-router-dom';
 
-// Initialize Gemini API - Moving back to frontend per guidelines
-const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY || '' });
+// Initialize Gemini API - Using the key provided by the user
+const apiKey = "AIzaSyCxGf8srYTO8CMwfYQOqGviYM3KmRwvCjY";
+const ai = new GoogleGenAI({ apiKey });
 
 interface Message {
   id?: string;
