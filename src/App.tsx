@@ -29,10 +29,11 @@ import Profile from './Profile';
 import { useSearchParams } from 'react-router-dom';
 
 // Initialize API keys from environment variables
-// Note: Hardcoding keys blocks GitHub synchronization for security reasons.
+// Note: Hardcoding keys here blocks GitHub synchronization for security reasons.
+// Please set VITE_GEMINI_API_KEY and VITE_OPENR_API_KEY in the Settings > Secrets menu.
 const geminiApiKey = import.meta.env.VITE_GEMINI_API_KEY || "";
 const openrApiKey = import.meta.env.VITE_OPENR_API_KEY || "";
-const ai = new GoogleGenAI({ apiKey: geminiApiKey || (typeof process !== 'undefined' ? process.env.GEMINI_API_KEY : '') || "" });
+const ai = new GoogleGenAI({ apiKey: geminiApiKey || "" });
 
 interface Message {
   id?: string;
