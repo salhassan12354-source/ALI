@@ -447,14 +447,15 @@ function Home({ user: initialUser }: { user: any }) {
     if (isNewConversation) fetchConversations();
 
     try {
-      const model = "gemini-3-flash-preview";
+      const model = modelTier === 'ALI5.7 BETA' ? "gemini-3.1-pro-preview" : "gemini-3-flash-preview";
       const parts: any[] = [];
       if (userMessage.image) {
         const base64Data = userMessage.image.split(',')[1];
+        const mimeType = userMessage.image.split(';')[0].split(':')[1];
         parts.push({
           inlineData: {
             data: base64Data,
-            mimeType: "image/jpeg"
+            mimeType: mimeType
           }
         });
       }
