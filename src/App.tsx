@@ -29,11 +29,11 @@ import Profile from './Profile';
 import { useSearchParams } from 'react-router-dom';
 
 // Initialize API keys from environment variables
-// Note: Hardcoding keys here blocks GitHub synchronization for security reasons.
+// Note: Using environment variables allows GitHub synchronization while keeping keys secure.
 // Please set VITE_GEMINI_API_KEY and VITE_OPENR_API_KEY in the Settings > Secrets menu.
 const geminiApiKey = import.meta.env.VITE_GEMINI_API_KEY || "";
 const openrApiKey = import.meta.env.VITE_OPENR_API_KEY || "";
-const ai = new GoogleGenAI({ apiKey: geminiApiKey || "" });
+const ai = new GoogleGenAI({ apiKey: geminiApiKey || (typeof process !== 'undefined' ? process.env.GEMINI_API_KEY : '') || "" });
 
 interface Message {
   id?: string;
@@ -469,23 +469,57 @@ function Home({ user: initialUser }: { user: any }) {
         parts.push({ text: "اشرح لي هذا السؤال من فضلك." });
       }
 
-      // Call Gemini directly from the frontend
-      const response = await ai.models.generateContent({
-        model,
-        contents: { parts },
-        config: {
-          systemInstruction: getSystemInstruction(modelTier),
-          temperature: 0.7,
-        }
-      });
+      let assistantText = "";
 
-      if (!response || !response.text) {
-        throw new Error("لم يتم استلام رد من الذكاء الاصطناعي.");
+      if (modelTier === 'ALI5.7 BETA') {
+        const res = await fetch("https://openrouter.ai/api/v1/chat/completions", {
+          method: "POST",
+          headers: {
+            "Authorization": `Bearer ${openrApiKey}`,
+            "Content-Type": "application/json",
+            "HTTP-Referer": typeof window !== 'undefined' ? window.location.origin : '',
+            "X-Title": "Khawarizmi AI",
+          },
+          body: JSON.stringify({
+            model: "nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free",
+            messages: [
+              { role: "system", content: getSystemInstruction(modelTier) },
+              { role: "user", content: userMessage.content || "اشرح لي هذا السؤال من فضلك." }
+            ],
+            temperature: 0.7,
+          })
+        });
+
+        if (!res.ok) {
+          const errorData = await res.json();
+          throw new Error(errorData.error?.message || "Failed to fetch from OpenRouter");
+        }
+
+        const data = await res.json();
+        if (!data.choices || !data.choices[0] || !data.choices[0].message) {
+          throw new Error("لم يتم استلام رد صالح من OpenRouter");
+        }
+        assistantText = data.choices[0].message.content;
+      } else {
+        // Call Gemini directly from the frontend
+        const response = await ai.models.generateContent({
+          model,
+          contents: { parts },
+          config: {
+            systemInstruction: getSystemInstruction(modelTier),
+            temperature: 0.7,
+          }
+        });
+
+        if (!response || !response.text) {
+          throw new Error("لم يتم استلام رد من الذكاء الاصطناعي.");
+        }
+        assistantText = response.text;
       }
 
       const assistantMessage: Message = {
         role: 'assistant',
-        content: cleanMarkdown(response.text),
+        content: cleanMarkdown(assistantText),
         timestamp: new Date(),
       };
 
