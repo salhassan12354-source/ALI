@@ -42,14 +42,26 @@ export default function Profile() {
   }, [navigate]);
 
   const fetchConversations = async (userId: string) => {
-    const { data, error } = await supabase
-      .from('conversations')
-      .select('*')
-      .eq('user_id', userId)
-      .order('created_at', { ascending: false });
+    try {
+      const { data, error } = await supabase
+        .from('conversations')
+        .select('*')
+        .eq('user_id', userId)
+        .order('created_at', { ascending: false });
 
-    if (error) console.error('Error:', error);
-    else setConversations(data || []);
+      if (error) {
+        if (error.code === 'PGRST205' || error.code === 'PGRST204') {
+          console.warn('Table "conversations" not found in Supabase.');
+          setConversations([]);
+        } else {
+          console.error('Error fetching conversations:', error);
+        }
+      } else {
+        setConversations(data || []);
+      }
+    } catch (err) {
+      console.error('Unexpected error fetching conversations:', err);
+    }
     setLoading(false);
   };
 

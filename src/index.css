@@ -246,7 +246,6 @@ body {
   50% {
     opacity: 1;
     transform: translateY(-3px);
-    color: var(--primary);
   }
   100% {
     opacity: 1;
@@ -257,7 +256,6 @@ body {
   0% {
     opacity: 0;
     transform: translateY(-20px);
-    color: var(--primary);
     filter: blur(5px);
   }
   30% {

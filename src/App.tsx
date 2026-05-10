@@ -4,6 +4,7 @@
  */
 
 import React, { useState, useRef, useEffect } from 'react';
+import { GoogleGenAI } from "@google/genai";
 import { 
   Send, 
   Image as ImageIcon, 
@@ -27,8 +28,8 @@ import SignUp from './SignUp';
 import Profile from './Profile';
 import { useSearchParams } from 'react-router-dom';
 
-// Initialize Gemini API - Moved to server side for better security and Vercel compatibility
-// const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY || '' });
+// Initialize Gemini API - Moving back to frontend per guidelines
+const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY || '' });
 
 interface Message {
   id?: string;
@@ -131,6 +132,7 @@ function Home({ user: initialUser }: { user: any }) {
   const [modelTier, setModelTier] = useState<'ALI4.6' | 'ALI5.7 BETA'>('ALI4.6');
   const [showModelEffect, setShowModelEffect] = useState(false);
   const [user, setUser] = useState<any>(initialUser);
+  const [questionsCount, setQuestionsCount] = useState(0);
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
   const [isDarkMode, setIsDarkMode] = useState(() => {
@@ -158,8 +160,48 @@ function Home({ user: initialUser }: { user: any }) {
   useEffect(() => {
     if (user) {
       fetchConversations();
+      fetchQuestionsCount();
+
+      // Subscribe to Qustion table changes for real-time updates
+      const channel = supabase
+        .channel('qustion_changes')
+        .on('postgres_changes', { 
+          event: '*', 
+          schema: 'public', 
+          table: 'Qustion',
+          filter: `user_id=eq.${user.id}`
+        }, () => {
+          fetchQuestionsCount();
+        })
+        .subscribe();
+
+      return () => {
+        supabase.removeChannel(channel);
+      };
     }
   }, [user]);
+
+  const fetchQuestionsCount = async () => {
+    if (!user) return;
+    try {
+      const { count, error } = await supabase
+        .from('Qustion')
+        .select('*', { count: 'exact', head: true })
+        .eq('user_id', user.id);
+      
+      if (error) {
+        if (error.code === 'PGRST204' || error.code === 'PGRST205') {
+          console.warn('Qustion table not found in Supabase.');
+        } else {
+          console.error('Error fetching questions count:', error);
+        }
+      } else {
+        setQuestionsCount(count || 0);
+      }
+    } catch (err) {
+      console.error('Unexpected error fetching questions count:', err);
+    }
+  };
 
   useEffect(() => {
     const chatId = searchParams.get('chat');
@@ -330,28 +372,39 @@ function Home({ user: initialUser }: { user: any }) {
   };
 
   const handleSend = async () => {
-    if ((!input.trim() && !selectedImage) || isTyping || !user) return;
+    if ((!input.trim() && !selectedImage) || isTyping) return;
+    
+    if (!user) {
+      alert('يرجى تسجيل الدخول أولاً لإرسال الرسائل.');
+      navigate('/signin');
+      return;
+    }
 
     let conversationId = activeConversationId;
     const isNewConversation = !conversationId;
 
     // 1. Create conversation if it doesn't exist
     if (isNewConversation) {
-      const { data: conv, error: convError } = await supabase
-        .from('conversations')
-        .insert({
-          user_id: user.id,
-          title: input.trim().substring(0, 30) || 'محادثة صورية'
-        })
-        .select()
-        .single();
-      
-      if (convError || !conv) {
-        console.error('Error creating conversation:', convError);
-        return;
+      try {
+        const { data: conv, error: convError } = await supabase
+          .from('conversations')
+          .insert({
+            user_id: user.id,
+            title: input.trim().substring(0, 30) || 'محادثة صورية'
+          })
+          .select()
+          .single();
+        
+        if (convError) {
+          console.warn('Table "conversations" might be missing. Proceeding local-only.', convError);
+          // Don't return, just don't set the ID
+        } else if (conv) {
+          conversationId = conv.id;
+          setActiveConversationId(conversationId);
+        }
+      } catch (err) {
+        console.warn('Failed to create conversation entry. Proceeding local-only.');
       }
-      conversationId = conv.id;
-      setActiveConversationId(conversationId);
     }
 
     const userMessage: Message = {
@@ -362,15 +415,27 @@ function Home({ user: initialUser }: { user: any }) {
     };
 
     // 2. Persist user message
-    const { error: msgError } = await supabase.from('messages').insert({
-      conversation_id: conversationId,
-      user_id: user.id,
-      role: 'user',
-      content: userMessage.content,
-      image: userMessage.image
-    });
+    if (conversationId) {
+      supabase.from('messages').insert({
+        conversation_id: conversationId,
+        user_id: user.id,
+        role: 'user',
+        content: userMessage.content,
+        image: userMessage.image
+      }).then(({ error }) => {
+        if (error) console.warn('Persistence failed for messages table:', error);
+      });
 
-    if (msgError) console.error('Error saving user message:', msgError);
+      // Also track in Qustion table as requested by user for counting
+      supabase.from('Qustion').insert({
+        user_id: user.id,
+        content: userMessage.content,
+        type: 'text'
+      }).then(({ error }) => {
+        if (error) console.warn('Could not insert into Qustion table:', error);
+        else fetchQuestionsCount();
+      });
+    }
 
     setMessages(prev => [...prev, userMessage]);
     setIsTyping(true);
@@ -381,7 +446,7 @@ function Home({ user: initialUser }: { user: any }) {
     if (isNewConversation) fetchConversations();
 
     try {
-      const model = "gemini-3.1-pro-preview";
+      const model = "gemini-3-flash-preview";
       const parts: any[] = [];
       if (userMessage.image) {
         const base64Data = userMessage.image.split(',')[1];
@@ -399,29 +464,23 @@ function Home({ user: initialUser }: { user: any }) {
         parts.push({ text: "اشرح لي هذا السؤال من فضلك." });
       }
 
-      const response = await fetch('/api/chat', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          model,
-          contents: { parts },
-          config: {
-            systemInstruction: getSystemInstruction(modelTier),
-            temperature: 0.7,
-          }
-        }),
+      // Call Gemini directly from the frontend
+      const response = await ai.models.generateContent({
+        model,
+        contents: { parts },
+        config: {
+          systemInstruction: getSystemInstruction(modelTier),
+          temperature: 0.7,
+        }
       });
 
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.message || "Failed to fetch from AI server");
+      if (!response || !response.text) {
+        throw new Error("لم يتم استلام رد من الذكاء الاصطناعي.");
       }
-
-      const data = await response.json();
 
       const assistantMessage: Message = {
         role: 'assistant',
-        content: cleanMarkdown(data.text || "عذراً، حدث خطأ أثناء معالجة طلبك."),
+        content: cleanMarkdown(response.text),
         timestamp: new Date(),
       };
 
@@ -434,11 +493,11 @@ function Home({ user: initialUser }: { user: any }) {
       });
 
       setMessages(prev => [...prev, assistantMessage]);
-    } catch (error) {
+    } catch (error: any) {
       console.error("Gemini Error:", error);
       const errorMessage: Message = {
         role: 'assistant',
-        content: "عذراً، حدث خطأ في النظام. يرجى المحاولة مرة أخرى لاحقاً.",
+        content: `عذراً، حدث خطأ في النظام: ${error.message || 'خطأ غير معروف'}. يرجى التأكد من اتصال الإنترنت وإعدادات العميل.`,
         timestamp: new Date(),
       };
       setMessages(prev => [...prev, errorMessage]);
@@ -623,13 +682,13 @@ function Home({ user: initialUser }: { user: any }) {
           </div>
           <div className="p-4 border-t border-slate-100 dark:border-tech-border bg-slate-50/50 dark:bg-tech-card">
             <div className="flex items-center justify-between text-[10px] text-slate-500 dark:text-slate-500 font-mono">
-              <span className="uppercase tracking-widest">ACCESS_LEVEL: ELITE</span>
-              <span className="text-slate-900 dark:text-tech-cyan">PROGRESS: 85%</span>
+              <span className="uppercase tracking-widest">ACCESS_LEVEL: {questionsCount > 100 ? 'ELITE' : questionsCount > 50 ? 'PRO' : 'ADVANCED'}</span>
+              <span className="text-slate-900 dark:text-tech-cyan">PROGRESS: {questionsCount}</span>
             </div>
             <div className="w-full h-1 bg-slate-200 dark:bg-tech-border mt-3 overflow-hidden">
               <motion.div 
                 initial={{ width: 0 }}
-                animate={{ width: '85%' }}
+                animate={{ width: `${Math.min(100, Math.max(5, (questionsCount / 100) * 100))}%` }}
                 className="h-full bg-slate-950 dark:bg-tech-cyan"
               ></motion.div>
             </div>
@@ -841,7 +900,7 @@ function Home({ user: initialUser }: { user: any }) {
                       <div className="icon">
                         <Send size={16} />
                       </div>
-                      <p className="px-2 transition-all duration-300 uiverse-text whitespace-nowrap">
+                      <p className="px-2 transition-all duration-300 uiverse-text whitespace-nowrap !text-tech-cyan">
                         تحليل ذكي
                       </p>
                     </div>
