@@ -9,6 +9,7 @@ export default function SignUp() {
   const [password, setPassword] = useState('');
   const [fullName, setFullName] = useState('');
   const [error, setError] = useState<string | null>(null);
+  const [success, setSuccess] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const navigate = useNavigate();
 
@@ -16,6 +17,7 @@ export default function SignUp() {
     e.preventDefault();
     setLoading(true);
     setError(null);
+    setSuccess(null);
 
     const { data, error: signUpError } = await supabase.auth.signUp({
       email,
@@ -31,10 +33,9 @@ export default function SignUp() {
       setError(signUpError.message);
       setLoading(false);
     } else if (data.user && !data.session) {
-      setError('يرجى التحقق من بريدك الإلكتروني وتأكيد حسابك قبل تسجيل الدخول.');
+      setSuccess('تم إنشاء الحساب بنجاح! يرجى التحقق من بريدك الإلكتروني وتأكيد حسابك قبل تسجيل الدخول.');
       setLoading(false);
     } else {
-      // بعد التسجيل بنجاح، ننتقل للرئيسية
       navigate('/');
     }
   };
@@ -142,6 +143,16 @@ export default function SignUp() {
               className="text-xs font-bold text-red-500 bg-red-50 dark:bg-red-500/10 p-3 rounded-xl border border-red-100 dark:border-red-500/20"
             >
               {error}
+            </motion.p>
+          )}
+
+          {success && (
+            <motion.p 
+              initial={{ opacity: 0, height: 0 }}
+              animate={{ opacity: 1, height: 'auto' }}
+              className="text-xs font-bold text-emerald-500 bg-emerald-50 dark:bg-emerald-500/10 p-3 rounded-xl border border-emerald-100 dark:border-emerald-500/20"
+            >
+              {success}
             </motion.p>
           )}
 

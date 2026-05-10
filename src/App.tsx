@@ -24,15 +24,24 @@ import { BrowserRouter, Routes, Route, useNavigate, Navigate } from 'react-route
 import { supabase } from './supabaseClient';
 import SignIn from './SignIn';
 import SignUp from './SignUp';
+import Profile from './Profile';
+import { useSearchParams } from 'react-router-dom';
 
 // Initialize Gemini API - Moved to server side for better security and Vercel compatibility
 // const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY || '' });
 
 interface Message {
+  id?: string;
   role: 'user' | 'assistant';
   content: string;
   image?: string;
   timestamp: Date;
+}
+
+interface Conversation {
+  id: string;
+  title: string;
+  created_at: string;
 }
 
 const SYSTEM_INSTRUCTION = `أنت الخوارزمي AI، نموذج ذكاء اصطناعي متخصص تم تطويره لمساعدة الطلاب السعوديين على اجتياز اختبار القدرات العامة الكمي بأعلى الدرجات.
@@ -90,10 +99,19 @@ export default function App() {
     return () => subscription.unsubscribe();
   }, []);
 
+  if (loading) {
+    return (
+      <div className="h-screen bg-slate-50 dark:bg-slate-950 flex items-center justify-center">
+        <Loader2 className="animate-spin text-slate-900 dark:text-white opacity-20" size={32} />
+      </div>
+    );
+  }
+
   return (
     <BrowserRouter>
       <Routes>
         <Route path="/" element={session ? <Home user={session.user} /> : <Navigate to="/signin" />} />
+        <Route path="/profile" element={session ? <Profile /> : <Navigate to="/signin" />} />
         <Route path="/signin" element={!session ? <SignIn /> : <Navigate to="/" />} />
         <Route path="/signup" element={!session ? <SignUp /> : <Navigate to="/" />} />
         <Route path="*" element={<Navigate to="/" />} />
@@ -104,6 +122,8 @@ export default function App() {
 
 function Home({ user: initialUser }: { user: any }) {
   const [messages, setMessages] = useState<Message[]>([]);
+  const [conversations, setConversations] = useState<Conversation[]>([]);
+  const [activeConversationId, setActiveConversationId] = useState<string | null>(null);
   const [currentPage, setCurrentPage] = useState<'chat' | 'about'>('chat');
   const [input, setInput] = useState('');
   const [isTyping, setIsTyping] = useState(false);
@@ -111,6 +131,7 @@ function Home({ user: initialUser }: { user: any }) {
   const [modelTier, setModelTier] = useState<'ALI4.6' | 'ALI5.7 BETA'>('ALI4.6');
   const [showModelEffect, setShowModelEffect] = useState(false);
   const [user, setUser] = useState<any>(initialUser);
+  const [searchParams] = useSearchParams();
   const navigate = useNavigate();
   const [isDarkMode, setIsDarkMode] = useState(() => {
     if (typeof window !== 'undefined') {
@@ -134,8 +155,63 @@ function Home({ user: initialUser }: { user: any }) {
     return () => subscription.unsubscribe();
   }, []);
 
-  const handleSignOut = async () => {
-    await supabase.auth.signOut();
+  useEffect(() => {
+    if (user) {
+      fetchConversations();
+    }
+  }, [user]);
+
+  useEffect(() => {
+    const chatId = searchParams.get('chat');
+    if (chatId && user) {
+      handleSelectConversation(chatId);
+    }
+  }, [searchParams, user]);
+
+  const fetchConversations = async () => {
+    const { data, error } = await supabase
+      .from('conversations')
+      .select('*')
+      .order('created_at', { ascending: false });
+    
+    if (error) console.error('Error fetching conversations:', error);
+    else setConversations(data || []);
+  };
+
+  const fetchMessages = async (conversationId: string) => {
+    const { data, error } = await supabase
+      .from('messages')
+      .select('*')
+      .eq('conversation_id', conversationId)
+      .order('created_at', { ascending: true });
+    
+    if (error) {
+      console.error('Error fetching messages:', error);
+      return;
+    }
+
+    const formattedMessages: Message[] = data.map(m => ({
+      id: m.id,
+      role: m.role,
+      content: m.content,
+      image: m.image,
+      timestamp: new Date(m.created_at)
+    }));
+
+    setMessages(formattedMessages);
+  };
+
+  const handleSelectConversation = (id: string) => {
+    setActiveConversationId(id);
+    fetchMessages(id);
+    setCurrentPage('chat');
+  };
+
+  const startNewChat = () => {
+    setActiveConversationId(null);
+    setMessages([]);
+    setSelectedImage(null);
+    setInput('');
   };
 
   const scrollToBottom = () => {
@@ -175,8 +251,22 @@ function Home({ user: initialUser }: { user: any }) {
     }
   };
 
-  const clearChat = () => {
-    if (confirm('هل أنت متأكد من مسح المحادثة؟')) {
+  const clearChat = async () => {
+    if (activeConversationId) {
+      if (confirm('هل أنت متأكد من مسح هذه المحادثة بالكامل؟')) {
+        const { error } = await supabase
+          .from('conversations')
+          .delete()
+          .eq('id', activeConversationId);
+        
+        if (error) {
+          alert('حدث خطأ أثناء الحذف');
+        } else {
+          startNewChat();
+          fetchConversations();
+        }
+      }
+    } else {
       setMessages([]);
       setSelectedImage(null);
     }
@@ -240,7 +330,29 @@ function Home({ user: initialUser }: { user: any }) {
   };
 
   const handleSend = async () => {
-    if ((!input.trim() && !selectedImage) || isTyping) return;
+    if ((!input.trim() && !selectedImage) || isTyping || !user) return;
+
+    let conversationId = activeConversationId;
+    const isNewConversation = !conversationId;
+
+    // 1. Create conversation if it doesn't exist
+    if (isNewConversation) {
+      const { data: conv, error: convError } = await supabase
+        .from('conversations')
+        .insert({
+          user_id: user.id,
+          title: input.trim().substring(0, 30) || 'محادثة صورية'
+        })
+        .select()
+        .single();
+      
+      if (convError || !conv) {
+        console.error('Error creating conversation:', convError);
+        return;
+      }
+      conversationId = conv.id;
+      setActiveConversationId(conversationId);
+    }
 
     const userMessage: Message = {
       role: 'user',
@@ -249,8 +361,24 @@ function Home({ user: initialUser }: { user: any }) {
       timestamp: new Date(),
     };
 
+    // 2. Persist user message
+    const { error: msgError } = await supabase.from('messages').insert({
+      conversation_id: conversationId,
+      user_id: user.id,
+      role: 'user',
+      content: userMessage.content,
+      image: userMessage.image
+    });
+
+    if (msgError) console.error('Error saving user message:', msgError);
+
     setMessages(prev => [...prev, userMessage]);
     setIsTyping(true);
+    setInput('');
+    setSelectedImage(null);
+
+    // Refresh conversations list if new
+    if (isNewConversation) fetchConversations();
 
     try {
       const model = "gemini-3.1-pro-preview";
@@ -271,12 +399,9 @@ function Home({ user: initialUser }: { user: any }) {
         parts.push({ text: "اشرح لي هذا السؤال من فضلك." });
       }
 
-      // Call our server-side API instead of direct Gemini usage
       const response = await fetch('/api/chat', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           model,
           contents: { parts },
@@ -300,9 +425,15 @@ function Home({ user: initialUser }: { user: any }) {
         timestamp: new Date(),
       };
 
+      // 3. Persist assistant message
+      await supabase.from('messages').insert({
+        conversation_id: conversationId,
+        user_id: user.id,
+        role: 'assistant',
+        content: assistantMessage.content
+      });
+
       setMessages(prev => [...prev, assistantMessage]);
-      setInput(''); // Clear input only on success
-      setSelectedImage(null); // Clear image only on success
     } catch (error) {
       console.error("Gemini Error:", error);
       const errorMessage: Message = {
@@ -317,7 +448,7 @@ function Home({ user: initialUser }: { user: any }) {
   };
 
   return (
-    <div className={`flex flex-col h-screen bg-slate-50 dark:bg-slate-950 font-sans overflow-hidden text-slate-900 dark:text-slate-100 transition-colors duration-500`} dir="rtl" id="app-root">
+    <div className={`flex flex-col h-screen bg-slate-50 dark:bg-tech-bg font-sans overflow-hidden text-slate-900 dark:text-slate-100 transition-colors duration-500 tech-grid relative scanlines`} dir="rtl" id="app-root">
       <AnimatePresence>
         {showModelEffect && (
           <motion.div
@@ -370,17 +501,19 @@ function Home({ user: initialUser }: { user: any }) {
         )}
       </AnimatePresence>
       {/* Top Navigation */}
-      <nav className="h-20 bg-white/80 dark:bg-slate-900/80 backdrop-blur-xl border-b border-slate-200 dark:border-slate-800 px-8 flex items-center justify-between shrink-0 z-30 transition-all duration-500">
+      <nav className="h-16 bg-white/80 dark:bg-tech-card/80 backdrop-blur-xl border-b border-slate-200 dark:border-tech-border px-8 flex items-center justify-between shrink-0 z-30 transition-all duration-500">
         <div className="flex items-center space-x-reverse space-x-6">
           <div className="flex items-center gap-3 group cursor-pointer">
+            <div className="h-10 w-10 flex items-center justify-center">
               <img 
                 src="https://res.cloudinary.com/dozskgkr6/image/upload/v1778329063/52d97505-87cd-457f-8eb1-b722b8e84f3d_h0tiqr.png" 
                 alt="Logo" 
-                className="h-16 w-16 object-contain transition-transform duration-500 group-hover:rotate-12" 
+                className="h-10 w-10 object-contain brightness-0 dark:brightness-200" 
               />
+            </div>
             <div className="flex flex-col">
-              <span className="text-xl font-black text-slate-800 dark:text-white tracking-tight leading-none">الخوارزمي AI</span>
-              <span className="text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-widest mt-1">المرافق الذكي للقدرات</span>
+              <span className="text-lg font-display font-black text-slate-800 dark:text-white tracking-tight leading-none">الخوارزمي AI</span>
+              <span className="font-mono text-[9px] text-slate-400 dark:text-tech-cyan/60 uppercase tracking-widest mt-1">N_SYSTEM: 4.6_ACTIVE</span>
             </div>
           </div>
         </div>
@@ -413,12 +546,17 @@ function Home({ user: initialUser }: { user: any }) {
             >
               عن أورانوس
             </button>
-            <div className="w-10 h-10 rounded-xl bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 flex items-center justify-center text-slate-400 dark:text-slate-500 hover:bg-slate-200 dark:hover:bg-slate-700 hover:text-slate-600 transition-all cursor-pointer shadow-sm">
-              <History size={20} />
+            <div className="w-10 h-10 rounded-xl bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 flex items-center justify-center text-slate-400 dark:text-slate-500 hover:bg-slate-200 dark:hover:bg-slate-700 hover:text-slate-600 transition-all cursor-pointer shadow-sm"
+              onClick={() => navigate('/profile')}
+            >
+              <UserIcon size={20} />
             </div>
             {user ? (
                <button 
-                 onClick={handleSignOut}
+                 onClick={async () => {
+                   await supabase.auth.signOut();
+                   navigate('/signin');
+                 }}
                  className="flex items-center gap-2 px-4 py-2 bg-red-50 dark:bg-red-500/10 text-red-600 dark:text-red-400 rounded-xl text-xs font-bold hover:bg-red-100 dark:hover:bg-red-500/20 transition-all"
                >
                  <LogOut size={14} />
@@ -441,45 +579,65 @@ function Home({ user: initialUser }: { user: any }) {
         {currentPage === 'chat' ? (
           <>
             {/* Sidebar History (Right) */}
-            <aside className="hidden lg:flex w-64 bg-white dark:bg-slate-900 border-l border-slate-200 dark:border-slate-800 flex-col shrink-0 transition-colors duration-500">
-          <div className="p-4">
+            <aside className="hidden lg:flex w-64 bg-white dark:bg-tech-card border-l border-slate-200 dark:border-tech-border flex-col shrink-0 transition-colors duration-500 relative z-20">
+          <div className="p-4 space-y-2">
+            <button 
+              onClick={startNewChat}
+              className="w-full py-2 bg-slate-950 dark:bg-tech-cyan text-white dark:text-slate-950 rounded-md font-mono text-xs font-bold flex items-center justify-center space-x-reverse space-x-2 transition-all shadow-lg active:scale-95 border border-slate-800 dark:border-tech-cyan/50"
+            >
+              <Sparkles size={14} />
+              <span>INITIAL_NEW_SESSION</span>
+            </button>
             <button 
               onClick={clearChat}
-              className="w-full py-2.5 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 rounded-xl text-sm font-semibold flex items-center justify-center space-x-reverse space-x-2 transition-all transition-colors shadow-sm"
+              className="w-full py-2 bg-slate-100 dark:bg-tech-card hover:bg-red-50 dark:hover:bg-red-900/20 text-slate-700 dark:text-slate-400 hover:text-red-600 dark:hover:text-red-400 rounded-md font-mono text-[10px] font-semibold flex items-center justify-center space-x-reverse space-x-2 transition-all border border-slate-200 dark:border-tech-border"
               id="new-chat-sidebar-btn"
             >
-              <Trash2 size={16} className="text-slate-400 dark:text-slate-500" />
-              <span>مسح المحادثة</span>
+              <Trash2 size={12} className="opacity-50" />
+              <span>TERMINATE_ACTIVE_LINK</span>
             </button>
           </div>
           <div className="flex-1 overflow-hidden px-2 pt-2">
-            <p className="text-[10px] uppercase tracking-wider text-slate-400 dark:text-slate-500 font-bold px-4 mb-3">السجل</p>
-            <div className="space-y-1 overflow-y-auto max-h-full pb-4">
-              <div className="px-4 py-3 bg-slate-50 dark:bg-slate-800/50 text-slate-900 dark:text-white rounded-xl text-sm font-medium border-r-4 border-slate-900 dark:border-white cursor-pointer">المحادثة الحالية</div>
-              {messages.length > 0 && messages.filter(m => m.role === 'user').slice(0, 5).map((m, i) => (
-                <div key={i} className="px-4 py-3 hover:bg-slate-50 dark:hover:bg-slate-800 text-slate-600 dark:text-slate-400 rounded-xl text-sm transition-colors cursor-pointer truncate">
-                  {m.content || "سؤال جديد"}
+            <p className="tech-label px-4 mb-3">LOG_HISTORY</p>
+            <div className="space-y-1 overflow-y-auto max-h-[calc(100vh-320px)] pb-4 custom-scrollbar">
+              {conversations.length === 0 && (
+                <div className="px-4 py-8 text-center text-slate-400 dark:text-slate-600 text-[10px] font-mono italic">
+                  NO_DATA_FOUND
+                </div>
+              )}
+              {conversations.map((conv) => (
+                <div 
+                  key={conv.id} 
+                  onClick={() => handleSelectConversation(conv.id)}
+                  className={`px-4 py-2 text-xs transition-all cursor-pointer truncate border-r-2 ${
+                    activeConversationId === conv.id 
+                      ? 'bg-slate-50 dark:bg-tech-cyan/5 text-slate-900 dark:text-tech-cyan border-slate-900 dark:border-tech-cyan shadow-sm' 
+                      : 'text-slate-500 dark:text-slate-500 border-transparent hover:bg-slate-50 dark:hover:bg-white/5'
+                  }`}
+                >
+                  <span className="font-mono mr-2 opacity-30">#</span>
+                  {conv.title}
                 </div>
               ))}
             </div>
           </div>
-          <div className="p-4 border-t border-slate-100 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900/50">
-            <div className="flex items-center justify-between text-[11px] text-slate-500 dark:text-slate-400 font-bold">
-              <span>الاشتراك: طالب متميز</span>
-              <span className="text-slate-900 dark:text-white">85% تقدم</span>
+          <div className="p-4 border-t border-slate-100 dark:border-tech-border bg-slate-50/50 dark:bg-tech-card">
+            <div className="flex items-center justify-between text-[10px] text-slate-500 dark:text-slate-500 font-mono">
+              <span className="uppercase tracking-widest">ACCESS_LEVEL: ELITE</span>
+              <span className="text-slate-900 dark:text-tech-cyan">PROGRESS: 85%</span>
             </div>
-            <div className="w-full h-1.5 bg-slate-200 dark:bg-slate-700 rounded-full mt-3 overflow-hidden">
+            <div className="w-full h-1 bg-slate-200 dark:bg-tech-border mt-3 overflow-hidden">
               <motion.div 
                 initial={{ width: 0 }}
                 animate={{ width: '85%' }}
-                className="h-full bg-slate-900 dark:bg-white rounded-full"
+                className="h-full bg-slate-950 dark:bg-tech-cyan"
               ></motion.div>
             </div>
           </div>
         </aside>
 
         {/* Main Chat Area */}
-        <main className="flex-1 flex flex-col bg-slate-50 dark:bg-slate-950 overflow-hidden relative transition-colors duration-500">
+        <main className="flex-1 flex flex-col bg-slate-50/50 dark:bg-tech-bg/50 overflow-hidden relative transition-colors duration-500 backdrop-blur-sm">
           <div className="flex-1 p-4 md:p-6 overflow-y-auto flex flex-col space-y-6" id="chat-messages-sleek">
             <AnimatePresence mode="popLayout">
               {messages.length === 0 && (
@@ -830,7 +988,7 @@ function Home({ user: initialUser }: { user: any }) {
                 <div className="relative z-10 flex flex-col md:flex-row items-center justify-between gap-8">
                   <div className="space-y-3 text-center md:text-right">
                     <h3 className="text-2xl font-black">كن جزءاً من مجتمعنا</h3>
-                    <p className="text-white/60 dark:text-slate-950/60 font-medium">تابع آخر التطورات، التسريبات، والنصائح الحصرية لاختبار القدرات عبر قناتنا.</p>
+                    <p className="text-white/60 dark:text-slate-950/60 font-medium">هنا بتنزل أخبار تحديثات المودل، تطويرات تبغونها ونسويها، والكثير من المفاجآت القادمة.</p>
                   </div>
                   <a 
                     href="https://t.me/UranosAR" 

@@ -1,43 +1,87 @@
-@import url('https://fonts.googleapis.com/css2?family=Cairo:wght@400;500;600;700;900&family=JetBrains+Mono:wght@400;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;700&family=Inter:wght@300;400;500;600;700;800;900&display=swap');
 @import "tailwindcss";
 
 @theme {
-  --font-sans: "Cairo", ui-sans-serif, system-ui, sans-serif;
+  --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
   --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, monospace;
-  --variant-dark: (&:where(.dark, .dark *));
+  --font-display: "Space Grotesk", sans-serif;
+
+  --color-tech-bg: #050608;
+  --color-tech-card: #0c0e12;
+  --color-tech-border: #1a1c24;
+  --color-tech-cyan: #00f3ff;
+  --color-tech-emerald: #10b981;
 }
 
 :root {
   direction: rtl;
-  --primary: #0f172a;
-  --primary-foreground: #ffffff;
-  --secondary: #64748b;
-  --accent: #6366f1;
-}
-
-.dark {
-  --primary: #f8fafc;
-  --primary-foreground: #0f172a;
-  --secondary: #94a3b8;
-  --accent: #818cf8;
 }
 
 body {
-  @apply bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100 min-h-screen font-sans transition-colors duration-500;
-  background-image: 
-    radial-gradient(at 0% 0%, rgba(99, 102, 241, 0.03) 0px, transparent 50%),
-    radial-gradient(at 100% 0%, rgba(139, 92, 246, 0.03) 0px, transparent 50%);
+  @apply font-sans bg-slate-50 text-slate-900 min-h-screen transition-colors duration-500;
 }
 
 .dark body {
-  background-image: 
-    radial-gradient(at 0% 0%, rgba(99, 102, 241, 0.05) 0px, transparent 50%),
-    radial-gradient(at 100% 0%, rgba(139, 92, 246, 0.05) 0px, transparent 50%);
+  @apply bg-tech-bg text-slate-100;
 }
 
-/* Custom scrollbar for a polished look */
+/* Technical grid background */
+.tech-grid {
+  background-image: 
+    linear-gradient(to right, rgba(0, 0, 0, 0.05) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(0, 0, 0, 0.05) 1px, transparent 1px);
+  background-size: 40px 40px;
+}
+
+.dark .tech-grid {
+  background-image: 
+    linear-gradient(to right, rgba(0, 243, 255, 0.03) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(0, 243, 255, 0.03) 1px, transparent 1px);
+  background-size: 50px 50px;
+}
+
+/* Scanline effect */
+.scanlines::after {
+  content: " ";
+  display: block;
+  position: absolute;
+  top: 0;
+  left: 0;
+  bottom: 0;
+  right: 0;
+  background: linear-gradient(rgba(18, 16, 16, 0) 50%, rgba(0, 0, 0, 0.1) 50%), linear-gradient(90deg, rgba(255, 0, 0, 0.02), rgba(0, 255, 0, 0.01), rgba(0, 0, 255, 0.02));
+  z-index: 100;
+  background-size: 100% 4px, 3px 100%;
+  pointer-events: none;
+  opacity: 0.1;
+}
+
+.dark .scanlines::after {
+  opacity: 0.3;
+}
+
+@layer utilities {
+  .tech-card {
+    @apply bg-white dark:bg-tech-card border border-slate-200 dark:border-tech-border transition-all duration-300;
+  }
+  
+  .tech-label {
+    @apply font-mono text-[10px] uppercase tracking-[0.2em] opacity-40;
+  }
+
+  .tech-glow-cyan {
+    box-shadow: 0 0 20px rgba(0, 243, 255, 0.15);
+  }
+
+  .tech-glow-emerald {
+    box-shadow: 0 0 20px rgba(16, 185, 129, 0.15);
+  }
+}
+
+/* Polished Scrollbar */
 ::-webkit-scrollbar {
-  width: 6px;
+  width: 5px;
+  height: 5px;
 }
 
 ::-webkit-scrollbar-track {
@@ -45,7 +89,7 @@ body {
 }
 
 ::-webkit-scrollbar-thumb {
-  @apply bg-slate-200 rounded-full hover:bg-slate-300 transition-colors;
+  @apply bg-slate-200 dark:bg-tech-border rounded-full hover:bg-slate-300 dark:hover:bg-slate-800 transition-colors;
 }
 
 /* From Uiverse.io by marcelodolza */ 
