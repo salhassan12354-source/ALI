@@ -4,7 +4,6 @@
  */
 
 import React, { useState, useRef, useEffect } from 'react';
-import { GoogleGenAI } from "@google/genai";
 import { 
   Send, 
   Image as ImageIcon, 
@@ -28,12 +27,7 @@ import SignUp from './SignUp';
 import Profile from './Profile';
 import { useSearchParams } from 'react-router-dom';
 
-// Initialize API keys from environment variables
-// Note: Using environment variables allows GitHub synchronization while keeping keys secure.
-// Please set VITE_GEMINI_API_KEY and VITE_OPENR_API_KEY in the Settings > Secrets menu.
-const geminiApiKey = import.meta.env.VITE_GEMINI_API_KEY || "";
-const openrApiKey = import.meta.env.VITE_OPENR_API_KEY || "";
-const ai = new GoogleGenAI({ apiKey: geminiApiKey || (typeof process !== 'undefined' ? process.env.GEMINI_API_KEY : '') || "" });
+// AI chat logic is handled securely on the server-side.
 
 interface Message {
   id?: string;
@@ -81,7 +75,8 @@ const SYSTEM_INSTRUCTION = `أنت الخوارزمي AI، نموذج ذكاء �
 // Helper to clean markdown from strings (just in case model ignores instruction)
 const cleanMarkdown = (text: string) => {
   return text
-    .replace(/[#*ـ\-`]/g, '') // Remove common markdown and kashida
+    .replace(/[#ـ`]/g, '') // Remove hash, kashida, and backticks. Keep * for math multiplication if needed.
+    .replace(/\*{2,}/g, '') // Remove bold markdown but keep single *
     .replace(/\n{3,}/g, '\n\n') // Normalize multiple line breaks
     .trim();
 };
@@ -289,6 +284,10 @@ function Home({ user: initialUser }: { user: any }) {
   const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
+      if (file.size > 15 * 1024 * 1024) { // Increased limit for better details
+        alert('حجم الصورة كبير، يرجى اختيار صورة أقل من 15 ميجابايت.');
+        return;
+      }
       const reader = new FileReader();
       reader.onloadend = () => {
         setSelectedImage(reader.result as string);
@@ -450,7 +449,6 @@ function Home({ user: initialUser }: { user: any }) {
     if (isNewConversation) fetchConversations();
 
     try {
-      const model = modelTier === 'ALI5.7 BETA' ? "gemini-3.1-pro-preview" : "gemini-3-flash-preview";
       const parts: any[] = [];
       if (userMessage.image) {
         const base64Data = userMessage.image.split(',')[1];
@@ -469,53 +467,26 @@ function Home({ user: initialUser }: { user: any }) {
         parts.push({ text: "اشرح لي هذا السؤال من فضلك." });
       }
 
-      let assistantText = "";
-
-      if (modelTier === 'ALI5.7 BETA') {
-        const res = await fetch("https://openrouter.ai/api/v1/chat/completions", {
-          method: "POST",
-          headers: {
-            "Authorization": `Bearer ${openrApiKey}`,
-            "Content-Type": "application/json",
-            "HTTP-Referer": typeof window !== 'undefined' ? window.location.origin : '',
-            "X-Title": "Khawarizmi AI",
-          },
-          body: JSON.stringify({
-            model: "nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free",
-            messages: [
-              { role: "system", content: getSystemInstruction(modelTier) },
-              { role: "user", content: userMessage.content || "اشرح لي هذا السؤال من فضلك." }
-            ],
-            temperature: 0.7,
-          })
-        });
-
-        if (!res.ok) {
-          const errorData = await res.json();
-          throw new Error(errorData.error?.message || "Failed to fetch from OpenRouter");
-        }
-
-        const data = await res.json();
-        if (!data.choices || !data.choices[0] || !data.choices[0].message) {
-          throw new Error("لم يتم استلام رد صالح من OpenRouter");
-        }
-        assistantText = data.choices[0].message.content;
-      } else {
-        // Call Gemini directly from the frontend
-        const response = await ai.models.generateContent({
-          model,
-          contents: { parts },
-          config: {
-            systemInstruction: getSystemInstruction(modelTier),
-            temperature: 0.7,
+      // Call the server API instead of direct AI call
+      const response = await fetch("/api/chat", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          modelTier,
+          userMessage: {
+            ...userMessage,
+            image: selectedImage // Use the original high-res selected image
           }
-        });
+        })
+      });
 
-        if (!response || !response.text) {
-          throw new Error("لم يتم استلام رد من الذكاء الاصطناعي.");
-        }
-        assistantText = response.text;
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || "Failed to fetch from AI server");
       }
+
+      const data = await response.json();
+      const assistantText = data.text || "عذراً، لم يتم الحصول على رد.";
 
       const assistantMessage: Message = {
         role: 'assistant',
